@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MessageActions } from "@/components/MessageActions";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import logo from "@/assets/jardulli-logo.png";
 
 interface Message {
@@ -216,6 +217,7 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">Jardulli Máquinas</p>
             </div>
           </div>
+          <ThemeToggle />
         </header>
 
         {!currentConversationId ? (
