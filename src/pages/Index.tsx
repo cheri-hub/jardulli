@@ -133,63 +133,124 @@ const Index = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !currentConversationId || sending) return;
+    if (!inputMessage.trim() || sending) return;
 
-    const userMessage = inputMessage;
+    const userMessage = inputMessage.trim();
     setInputMessage("");
     setSending(true);
 
-    const { data: userMsg, error: userError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: currentConversationId,
-        role: "user",
-        content: userMessage,
-      })
-      .select()
-      .single();
+    try {
+      // Obtém sessão do usuário
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user?.id) {
+        throw new Error("Usuário não autenticado");
+      }
 
-    if (userError) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível enviar a mensagem",
-        variant: "destructive",
-      });
-      setSending(false);
-      return;
-    }
+      // Se não houver conversa, cria automaticamente
+      let conversationId = currentConversationId;
+      if (!conversationId) {
+        const { data: newConv, error: convError } = await supabase
+          .from("conversations")
+          .insert({
+            user_id: session.user.id,
+            title: userMessage.slice(0, 50),
+          })
+          .select()
+          .single();
 
-    // Simulate AI response (replace with actual AI integration)
-    setTimeout(async () => {
-      const aiResponse = `Esta é uma resposta simulada para: "${userMessage}". Em produção, aqui seria integrada a IA com a Knowledge Base da Jardulli Máquinas.`;
+        if (convError) throw convError;
+        
+        conversationId = newConv.id;
+        setCurrentConversationId(conversationId);
+      }
 
-      const { data: assistantMsg, error: assistantError } = await supabase
-        .from("messages")
-        .insert({
-          conversation_id: currentConversationId,
-          role: "assistant",
-          content: aiResponse,
-        })
-        .select()
-        .single();
+      // Chama Edge Function de IA
+      const { data: aiData, error: aiError } = await supabase.functions.invoke(
+        'ai-chat',
+        {
+          body: {
+            message: userMessage,
+            conversationId: conversationId,
+            userId: session.user.id
+          }
+        }
+      );
 
-      if (!assistantError && assistantMsg) {
+      if (aiError) {
+        console.error("Erro ao chamar Edge Function:", aiError);
+        
+        // Debug: ver resposta completa
+        try {
+          const debugResponse = await fetch(
+            `https://gplumtfxxhgckjkgloni.supabase.co/functions/v1/ai-chat`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbHVtdGZ4eGhnY2tqa2dsb25pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3ODU0MTYsImV4cCI6MjA3NjM2MTQxNn0.bGuIT3tLN5rNgvalJD9C8G6tN6FPqfuO2Zez64-ceqg',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: userMessage,
+                conversationId: conversationId,
+                userId: session.user.id
+              })
+            }
+          );
+          const debugText = await debugResponse.text();
+          console.error("🔍 Erro detalhado:", debugText);
+        } catch (e) {}
+        
+        throw aiError;
+      }
+
+      if (!aiData?.success) {
+        throw new Error(aiData?.error || "Erro ao processar mensagem");
+      }
+
+      // Edge Function já salvou as mensagens no banco
+      // Realtime vai atualizar a UI automaticamente
+
+      // Mapeia pergunta para resposta (para feedback)
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+      if (assistantMessages.length > 0) {
+        const lastAssistantMsg = assistantMessages[assistantMessages.length - 1];
         setUserQuestions((prev) => ({
           ...prev,
-          [assistantMsg.id]: userMessage,
+          [lastAssistantMsg.id]: userMessage,
         }));
       }
 
-      // Update conversation title with first message
-      if (messages.length === 0) {
+      // Atualiza título da conversa com primeira mensagem (se não foi definido na criação)
+      if (messages.length === 0 && currentConversationId) {
         await supabase
           .from("conversations")
           .update({ title: userMessage.slice(0, 50) })
-          .eq("id", currentConversationId);
+          .eq("id", conversationId);
       }
 
+    } catch (error: any) {
+      console.error("Erro ao enviar mensagem:", error);
+      
+      // Tratamento especial para rate limit
+      if (error.message?.includes("limite") || error.message?.includes("rate limit")) {
+        toast({
+          title: "Limite de mensagens atingido",
+          description: "Você atingiu o limite de 20 mensagens por hora. Tente novamente mais tarde.",
+          variant: "destructive",
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: "Erro ao processar mensagem",
+          description: error.message || "Não foi possível enviar a mensagem. Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    } finally {
       setSending(false);
-    }, 1500);
+    }
   };
 
   if (loading) {
