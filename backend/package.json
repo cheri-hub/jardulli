@@ -1,0 +1,14 @@
+{
+  "name": "jardulli-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Supabase backend infrastructure",
+  "scripts": {
+    "deploy": "supabase functions deploy",
+    "deploy:ai-chat": "supabase functions deploy ai-chat",
+    "deploy:upload": "supabase functions deploy upload-gemini-files",
+    "logs": "supabase functions logs",
+    "db:push": "supabase db push",
+    "db:reset": "supabase db reset"
+  }
+}

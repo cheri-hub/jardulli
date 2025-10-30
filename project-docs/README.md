@@ -10,50 +10,16 @@
 ## 🎯 O que é?
 
 Um chatbot inteligente que responde perguntas baseadas em documentos da sua empresa usando:
-
 - **Google Gemini AI** para respostas contextualizadas
 - **Gemini File API** para processamento otimizado de documentos (90% economia de tokens)
 - **RAG (Retrieval-Augmented Generation)** avançado sem limitações de tamanho
-
-## 📁 Estrutura do Projeto
-
-### 🧠 **Knowledge Base** (`knowledge-base/`)
-Gerenciamento da base de conhecimento e documentos para IA:
-- `pdfs/` - Arquivos PDF da base de conhecimento
-- `scripts/` - Scripts para upload e gerenciamento dos arquivos Gemini
-- `jardulli-info.md` - Informações específicas do cliente
-
-### 🎨 **Frontend** (`frontend/`)
-Interface do usuário React + Vite:
-- `src/` - Código-fonte da aplicação
-
-- `public/` - Arquivos estáticos- **Supabase** para backend, autenticação e storage
-
+- **Supabase** para backend, autenticação e storage
 - **React + TypeScript** para interface moderna
-- **shadcn/ui** para componentes modernos
-- **Tailwind CSS** para estilização
-
-### ⚙️ **Backend** (`backend/`)
-Infraestrutura Supabase:
-- `supabase/functions/` - Edge Functions (ai-chat, upload-gemini-files, etc.)
-- `supabase/migrations/` - Migrações do banco de dados
-- `supabase/config.toml` - Configurações do Supabase
-
-### � **Project Docs** (`project-docs/`)
-Documentação completa do projeto:
-- `DOCUMENTACAO-COMPLETA.md` - Documentação unificada
-- `COMO-ATUALIZAR-BASE-CONHECIMENTO.md` - Guia de atualização
-- `copilot-instructions.md` - Instruções para desenvolvedores
-
-### 🛠️ **Tools** (`tools/`)
-Ferramentas de desenvolvimento e manutenção:
-- Scripts PowerShell para deploy e logs
-- Utilitários para gerenciamento Supabase
 
 ## ✨ Principais Funcionalidades
 
-- � **Chat em tempo real** com IA
-- �📄 **Upload de documentos** via **Gemini File API** (sem limite de tamanho)
+- 💬 **Chat em tempo real** com IA
+- 📄 **Upload de documentos** via **Gemini File API** (sem limite de tamanho)
 - 🧠 **RAG Avançado**: IA responde com **file references** diretas no Gemini
 - 🔐 **Autenticação** de usuários via Supabase
 - 💾 **Histórico** de conversas persistente
@@ -65,34 +31,17 @@ Ferramentas de desenvolvimento e manutenção:
 
 ## 🚀 Quick Start
 
-### Desenvolvimento
-```bash
-# Instalar dependências
-npm run setup
+### Primeira vez rodando o projeto?
 
-# Iniciar servidor de desenvolvimento
-npm run dev
-
-# Build para produção
-npm run build
-```
-
-### Deploy
-```bash
-# Deploy das Edge Functions
-npm run deploy:functions
-```
-
-## 🚀 Primeira Vez Rodando o Projeto?
-
-Siga o guia completo: **[📋 DOCUMENTAÇÃO COMPLETA](project-docs/DOCUMENTACAO-COMPLETA.md)**
+Siga o guia completo: **[📋 DOCUMENTAÇÃO COMPLETA](DOCUMENTACAO-COMPLETA.md)**
 
 **Resumo rápido:**
+
 ```powershell
 # 1. Clonar e instalar
 git clone https://github.com/rpmarciano/jardulli-bot-buddy.git
 cd jardulli-bot-buddy
-npm run setup
+npm install
 
 # 2. Configurar Supabase CLI
 scoop install supabase
@@ -104,7 +53,7 @@ supabase db push
 
 # 4. Deploy Edge Functions
 supabase functions deploy ai-chat
-supabase functions deploy upload-gemini-files
+supabase functions deploy upload-document
 
 # 5. Configurar .env (veja exemplo abaixo)
 cp .env.example .env
@@ -113,52 +62,7 @@ cp .env.example .env
 npm run dev
 ```
 
-## � Deploy em Produção
-
-### 📱 **Frontend (Vercel/Netlify)**
-
-O frontend está configurado para usar basename `/jardulli` automaticamente em produção:
-
-```bash
-cd frontend
-npm run build
-```
-
-**⚠️ Configurações importantes para deploy:**
-
-1. **Base URL**: O app usa basename `/jardulli` em produção
-2. **Variáveis de ambiente**: Copie o `.env.local` para o provedor de hosting
-3. **Build Output**: Pasta `frontend/dist/` deve ser o root do deploy
-
-### ⚙️ **Backend (Supabase)**
-
-```bash
-cd backend
-supabase functions deploy ai-chat
-supabase functions deploy upload-gemini-files
-```
-
-### 🌍 **URLs de Produção Esperadas:**
-
-- **Frontend**: `https://seu-dominio.com/jardulli/`
-- **API Chat**: `https://gplumtfxxhgckjkgloni.supabase.co/functions/v1/ai-chat`
-
-## �🔗 Links Importantes
-
-- [Documentação Completa](./project-docs/DOCUMENTACAO-COMPLETA.md)
-- [Atualizar Base de Conhecimento](./project-docs/COMO-ATUALIZAR-BASE-CONHECIMENTO.md)
-- [Scripts da Base de Conhecimento](./knowledge-base/scripts/)
-
----
-
-## 📊 Status do Sistema
-
-- ✅ **Gemini File API**: Operacional com 90% economia de tokens
-- ✅ **Supabase Functions**: Deployed (ai-chat v30, upload-gemini-files v3)
-- ✅ **Base de Conhecimento**: 3 PDFs ativos e sincronizados
-- ✅ **Interface**: React + Vite com componentes modernos
-
-## ⚙️ Configurar arquivo .env
+### Configurar arquivo .env
 
 ```env
 VITE_SUPABASE_PROJECT_ID="seu-project-id"

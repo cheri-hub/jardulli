@@ -18,19 +18,39 @@ dist-ssr
 .env.production.local
 
 # Supabase
-supabase/.temp/
+backend/supabase/.temp/
 .supabase/
 
-# Examples (may contain other repos)
-EXAMPLES/
+# Build outputs
+dist/
+build/
+
+# IDE and system files
+.DS_Store
+Thumbs.db
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Runtime and cache files
+*.tsbuildinfo
+.turbo/
+.next/
+.nuxt/
+.cache/
