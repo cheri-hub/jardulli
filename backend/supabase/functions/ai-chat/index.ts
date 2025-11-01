@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.21.0";
+
+// Import cost calculator
+import { 
+  calculateGeminiCosts, 
+  createUsageMetrics,
+  type GeminiModel 
+} from "../shared/gemini-cost-calculator.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
@@ -32,33 +39,44 @@ serve(async (req)=>{
       });
     }
     console.log(`💬 Mensagem de usuário ${userId}: ${message.substring(0, 50)}...`);
-    // 1. Verifica rate limiting
-    console.log("🔍 Verificando rate limit...");
-    const { data: rateLimitCheck, error: rateLimitError } = await supabase.rpc("check_rate_limit", {
-      uid: userId,
-      max_messages: 20
-    });
-    if (rateLimitError) {
-      console.error("❌ Erro ao verificar rate limit:", rateLimitError);
-      throw new Error(`Erro ao verificar rate limit: ${rateLimitError.message}`);
-    }
-    console.log("📊 Rate limit check resultado:", rateLimitCheck);
-    if (rateLimitCheck && rateLimitCheck.length > 0) {
-      const { allowed, remaining } = rateLimitCheck[0];
-      if (!allowed) {
-        console.log(`⛔ Rate limit excedido para usuário ${userId}`);
-        return new Response(JSON.stringify({
-          error: "Você atingiu o limite de 20 mensagens por hora. Tente novamente mais tarde.",
-          rateLimitExceeded: true
-        }), {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json"
-          }
-        });
+    
+    // Track request start time for metrics
+    const requestStartTime = performance.now();
+    
+    // Check if we're in HML environment to skip rate limiting for testing
+    const isHMLEnvironment = Deno.env.get("ENVIRONMENT") === "hml";
+    
+    if (!isHMLEnvironment) {
+      // 1. Verifica rate limiting (only in production)
+      console.log("🔍 Verificando rate limit...");
+      const { data: rateLimitCheck, error: rateLimitError } = await supabase.rpc("check_rate_limit", {
+        uid: userId,
+        max_messages: 20
+      });
+      if (rateLimitError) {
+        console.error("❌ Erro ao verificar rate limit:", rateLimitError);
+        throw new Error(`Erro ao verificar rate limit: ${rateLimitError.message}`);
       }
-      console.log(`✅ Rate limit OK. Mensagens restantes: ${remaining}`);
+      console.log("📊 Rate limit check resultado:", rateLimitCheck);
+      if (rateLimitCheck && rateLimitCheck.length > 0) {
+        const { allowed, remaining } = rateLimitCheck[0];
+        if (!allowed) {
+          console.log(`⛔ Rate limit excedido para usuário ${userId}`);
+          return new Response(JSON.stringify({
+            error: "Você atingiu o limite de 20 mensagens por hora. Tente novamente mais tarde.",
+            rateLimitExceeded: true
+          }), {
+            status: 429,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json"
+            }
+          });
+        }
+        console.log(`✅ Rate limit OK. Mensagens restantes: ${remaining}`);
+      }
+    } else {
+      console.log("🧪 Ambiente HML detectado - pulando verificação de rate limit");
     }
     // 2. Busca arquivos processados no Gemini File API
     const { data: cachedFiles, error: cacheError } = await supabase
@@ -250,6 +268,45 @@ NUNCA:
     const response = result.response;
     const aiResponse = response.text() || "Desculpe, não consegui processar sua pergunta. Por favor, tente novamente.";
     console.log(`✅ Resposta gerada: ${aiResponse.substring(0, 100)}...`);
+
+    // Capture metrics for cost tracking
+    const requestEndTime = performance.now();
+    const requestDuration = Math.round(requestEndTime - requestStartTime);
+    
+    // Get token usage from response metadata
+    const usageMetadata = result.response.usageMetadata;
+    const inputTokens = usageMetadata?.promptTokenCount || 0;
+    const outputTokens = usageMetadata?.candidatesTokenCount || 0;
+    
+    console.log(`📊 Token usage - Input: ${inputTokens}, Output: ${outputTokens}, Duration: ${requestDuration}ms`);
+
+    // Calculate costs and create metrics
+    let metricsToLog = null;
+    try {
+      const currentModel = (modelName as GeminiModel) || 'gemini-1.5-flash';
+      const costs = calculateGeminiCosts(currentModel, inputTokens, outputTokens);
+      
+      console.log(`💰 Cost calculation - Input: $${costs.inputCost}, Output: $${costs.outputCost}, Total: $${costs.totalCost}`);
+      
+      metricsToLog = {
+        user_id: userId,
+        conversation_id: conversationId,
+        model_used: currentModel,
+        tokens_input: inputTokens,
+        tokens_output: outputTokens,
+        cost_input_usd: costs.inputCost,
+        cost_output_usd: costs.outputCost,
+        request_duration_ms: requestDuration,
+        files_processed: fileParts.length,
+        request_type: 'chat',
+        error_occurred: false,
+        error_message: null
+      };
+      
+    } catch (costError) {
+      console.error("❌ Erro ao calcular custos:", costError);
+    }
+
     // 9. Salva mensagens no banco (user + assistant) - apenas se houver conversationId
     if (conversationId) {
       const { error: insertError } = await supabase.from("messages").insert([
@@ -274,11 +331,44 @@ NUNCA:
       console.error("Erro ao salvar mensagens:", null);
     // Não retornamos erro aqui pois a resposta foi gerada
     }
-    // 10. Incrementa rate limiting
-    await supabase.rpc("increment_rate_limit", {
-      uid: userId
-    });
-    console.log(`💾 Mensagens salvas e rate limit atualizado`);
+    // 10. Incrementa rate limiting (only in production)
+    if (!isHMLEnvironment) {
+      await supabase.rpc("increment_rate_limit", {
+        uid: userId
+      });
+    } else {
+      console.log("🧪 Ambiente HML detectado - pulando incremento de rate limit");
+    }
+    
+    // 11. Log usage metrics for cost tracking
+    if (metricsToLog) {
+      try {
+        console.log("📊 Salvando métricas de custo...");
+        
+        // For simplicity, especially in testing, we don't require message_id
+        const finalMetrics = {
+          ...metricsToLog,
+          message_id: null, // Will be updated later if needed
+          conversation_id: conversationId || null
+        };
+
+        console.log("📊 Dados das métricas:", JSON.stringify(finalMetrics, null, 2));
+
+        const { error: metricsError } = await supabase
+          .from("gemini_usage_metrics")
+          .insert(finalMetrics);
+
+        if (metricsError) {
+          console.error("❌ Erro ao salvar métricas:", metricsError);
+        } else {
+          console.log(`✅ Métricas salvas com sucesso - Custo: $${metricsToLog.cost_input_usd + metricsToLog.cost_output_usd}`);
+        }
+      } catch (metricsError) {
+        console.error("❌ Erro ao processar métricas:", metricsError);
+      }
+    }
+    
+    console.log(`💾 Mensagens salvas, rate limit atualizado e métricas registradas`);
     return new Response(JSON.stringify({
       success: true,
       reply: aiResponse,
